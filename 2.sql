@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Хост: 127.0.0.1:3307
--- Время создания: Дек 04 2019 г., 23:33
+-- Время создания: Дек 06 2019 г., 23:27
 -- Версия сервера: 8.0.12
 -- Версия PHP: 7.2.10
 
@@ -30,23 +30,31 @@ SET time_zone = "+00:00";
 
 CREATE TABLE `a_category` (
   `id` int(11) NOT NULL,
-  `code` int(10) UNSIGNED NOT NULL,
+  `code` int(10) UNSIGNED DEFAULT NULL,
   `title` varchar(255) NOT NULL,
-  `parent_id` int(11) DEFAULT NULL
+  `parent_id` int(11) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 -- --------------------------------------------------------
 
 --
--- Структура таблицы `a_ price`
+-- Структура таблицы `a_price`
 --
 
-CREATE TABLE `a_ price` (
+CREATE TABLE `a_price` (
   `id` int(11) NOT NULL,
   `product_id` int(11) NOT NULL,
   `type` varchar(255) NOT NULL,
   `price` float DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+--
+-- Дамп данных таблицы `a_price`
+--
+
+INSERT INTO `a_price` (`id`, `product_id`, `type`, `price`) VALUES
+(187, 100, 'Базовая', 11.5),
+(188, 100, 'Москва', 12.5);
 
 -- --------------------------------------------------------
 
@@ -59,6 +67,13 @@ CREATE TABLE `a_product` (
   `code` int(10) UNSIGNED NOT NULL,
   `title` varchar(255) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+--
+-- Дамп данных таблицы `a_product`
+--
+
+INSERT INTO `a_product` (`id`, `code`, `title`) VALUES
+(100, 201, 'Бумага А4');
 
 -- --------------------------------------------------------
 
@@ -82,8 +97,17 @@ CREATE TABLE `a_property` (
   `id` int(11) NOT NULL,
   `product_id` int(11) NOT NULL,
   `property` varchar(255) NOT NULL,
+  `unit` varchar(255) DEFAULT NULL,
   `value` varchar(255) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+--
+-- Дамп данных таблицы `a_property`
+--
+
+INSERT INTO `a_property` (`id`, `product_id`, `property`, `unit`, `value`) VALUES
+(180, 100, 'Плотность', 'NULL', '100'),
+(181, 100, 'Белизна', '%', '150');
 
 --
 -- Индексы сохранённых таблиц
@@ -97,9 +121,9 @@ ALTER TABLE `a_category`
   ADD KEY `parent_id` (`parent_id`);
 
 --
--- Индексы таблицы `a_ price`
+-- Индексы таблицы `a_price`
 --
-ALTER TABLE `a_ price`
+ALTER TABLE `a_price`
   ADD PRIMARY KEY (`id`),
   ADD KEY `product_id` (`product_id`);
 
@@ -132,47 +156,41 @@ ALTER TABLE `a_property`
 -- AUTO_INCREMENT для таблицы `a_category`
 --
 ALTER TABLE `a_category`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=45;
 
 --
--- AUTO_INCREMENT для таблицы `a_ price`
+-- AUTO_INCREMENT для таблицы `a_price`
 --
-ALTER TABLE `a_ price`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+ALTER TABLE `a_price`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=189;
 
 --
 -- AUTO_INCREMENT для таблицы `a_product`
 --
 ALTER TABLE `a_product`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=101;
 
 --
 -- AUTO_INCREMENT для таблицы `a_product_category`
 --
 ALTER TABLE `a_product_category`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=49;
 
 --
 -- AUTO_INCREMENT для таблицы `a_property`
 --
 ALTER TABLE `a_property`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=182;
 
 --
 -- Ограничения внешнего ключа сохраненных таблиц
 --
 
 --
--- Ограничения внешнего ключа таблицы `a_category`
+-- Ограничения внешнего ключа таблицы `a_price`
 --
-ALTER TABLE `a_category`
-  ADD CONSTRAINT `a_category_ibfk_1` FOREIGN KEY (`parent_id`) REFERENCES `a_category` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
-
---
--- Ограничения внешнего ключа таблицы `a_ price`
---
-ALTER TABLE `a_ price`
-  ADD CONSTRAINT `a_ price_ibfk_1` FOREIGN KEY (`product_id`) REFERENCES `a_product` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `a_price`
+  ADD CONSTRAINT `a_price_ibfk_1` FOREIGN KEY (`product_id`) REFERENCES `a_product` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
 -- Ограничения внешнего ключа таблицы `a_product_category`

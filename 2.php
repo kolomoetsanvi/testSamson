@@ -186,10 +186,232 @@ function categoryTree($section, $parent_id, $link, $idProduct)
     }// if
 
 }//categoryTree($parent_id)
-
 //========================================================================
 //========================================================================
 
+
+
+
+//Реализовать функцию exportXml($a, $b).
+// $a – путь к xml файлу вида (структура файла приведена ниже),
+// $b – код рубрики. Результат ее выполнения: выбрать из БД товары
+// (и их характеристики, необходимые для формирования файла) выходящие в рубрику $b
+// или в любую из всех вложенных в нее рубрик, сохранить результат в файл $a
+function  exportXml($a, $b)
+{
+    //Данные для подключение к базе данных
+    $host     = 'localhost';     // адрес сервера
+    $database = 'test_samson';  // имя базы данных
+    $user     = 'root';          // имя пользователя
+    $password = '';   // пароль
+
+    // подключаемся к серверу
+    $link = mysqli_connect($host, $user, $password, $database)
+    or die("Ошибка " . mysqli_error($link));
+
+    $query ="SELECT * FROM a_category";
+    $result = mysqli_query($link, $query) or die("Ошибка " . mysqli_error($link));
+    if(!$result) throw new Exception('При проверке категории возникла ошибка');
+
+    //получаем с БД массив всех категорий
+    $arr_category = array();
+    while($row = mysqli_fetch_assoc($result)){
+        $arr_category[] = $row;
+    }
+
+
+    //Получаем id заданной категории
+    $query ="SELECT id FROM a_category
+             WHERE code like \"".$b."\" LIMIT 1";
+    $result = mysqli_query($link, $query) or die("Ошибка " . mysqli_error($link));
+    if(!$result) throw new Exception('При проверке категории возникла ошибка');
+    $idParentCategory = mysqli_fetch_row($result)[0];
+
+
+
+    //Получаем массив с id всех категорий, вложенных в заданную
+    $idCategories = getCategoryId($arr_category, $idParentCategory);
+    $idCategories = rtrim($idCategories, ',');
+
+    // Получаем список продуктов, которые входят в подкатегории
+    // указанной категории.
+    $products = getProducts($idCategories, $link);
+
+    //!!!!!!!!!!
+    //формируем XML контент
+    $file = "exportResult.xml";
+    $content = new SimpleXMLElement('<?xml version="1.0" encoding="utf-8"?><Товары/>');
+    foreach ($products as $product){
+       $Prod = $content->addChild('Товар');
+       $Prod->addAttribute('Код', $product['code'] );
+       $Prod->addAttribute('Название', $product['title'] );
+
+
+        // получаем цены для данного товара
+        $query ="SELECT * FROM a_price WHERE product_id like ".$product['id'];
+        $result = mysqli_query($link, $query) or die("Ошибка " . mysqli_error($link));
+        if(!$result) throw new Exception('При проверке категории возникла ошибка');
+        $prices = array();
+        while($row = mysqli_fetch_assoc($result)){
+            $prices[] = $row;
+        }//while
+        foreach ($prices as $price){
+            $pr = $Prod->addChild('Цена', $price['price']);
+            $pr->addAttribute('Тип', $price['type']);
+        }//foreach ($prices as $price)
+        //---------------------------------------------------------
+
+        // получаем свойства для данного товара
+        $query ="SELECT * FROM a_property WHERE product_id like ".$product['id'];
+        $result = mysqli_query($link, $query) or die("Ошибка " . mysqli_error($link));
+        if(!$result) throw new Exception('При проверке категории возникла ошибка');
+        $properties = array();
+        while($row = mysqli_fetch_assoc($result)){
+            $properties[] = $row;
+        }//while
+
+        $prop = $Prod->addChild('Свойства');
+        foreach ($properties as $property){
+            $item = $prop->addChild($property['property'], $property['value']);
+           // if ($property['unit'] != NULL) $item->addAttribute('ЕдИзм', $property['unit']);
+        }//foreach ($prices as $price)
+        //---------------------------------------------------------
+
+
+        //Формируем разделы к которым относится продукт
+        $sections = $Prod->addChild('Разделы');
+
+        // формируем массив с категориями, в котором ключ - id категории
+        $query ="SELECT * FROM a_category";
+        $result = mysqli_query($link, $query) or die("Ошибка " . mysqli_error($link));
+        if(!$result) throw new Exception('При проверке категории возникла ошибка');
+
+        //получаем с БД массив всех категорий
+        $all_category = array();
+        while($row = mysqli_fetch_assoc($result)){
+            $all_category[$row['id']] = $row;
+        }
+
+        //Получаем список категорий в которых непосредственно хранится продукт
+        $productCategoty = getProductCategoty($product['id'], $link);
+
+        //Для каждой категории продукта готовим список родительских категорий в которые она входит
+        // Потом раскручиваем список с самой верхней категории и формируем xml документ
+        foreach ($productCategoty as $category){
+
+          $tempArr = getTempArr($all_category, $category);
+          $tempArr = array_reverse($tempArr);
+
+          editCategory($sections, $tempArr, 0);
+        }//foreach ($productCategoty as $category){
+
+    }//foreach ($products as $product)
+
+
+
+    //записываем данные  в xml файл
+     $content->asXML($file);
+   // закрываем подключение
+    mysqli_close($link);
+
+}//exportXml($a, $b)
+
+//===================================================================================
+//вспомогательная функция. Получаем id всех подкатегорий входящи в заданную категорию
+function  getCategoryId($array, $id){
+    $data = $id.',';
+    foreach ($array as $item){
+        if($item['parent_id'] == $id){
+            $data .= $item['id'].',';
+            $data .= getCategoryId($array, $item['id']);
+        }
+    }
+    return $data;
+} //function  getCategoryId($array, $kodCat
+
+//=======================================================================
+//вспомогательная функция. Получаем  товары входящие в подкатегории
+function getProducts($idCategories, $link){
+        // Получаем список id товаров
+        $query ="SELECT product_id FROM a_product_category
+                 WHERE category_id IN($idCategories)";
+        $result = mysqli_query($link, $query) or die("Ошибка " . mysqli_error($link));
+        if(!$result) throw new Exception('При проверке категории возникла ошибка');
+        $idProducts = '';
+        while($row = mysqli_fetch_row($result)){
+            $idProducts .= $row[0].',';
+        }
+    $idProducts = rtrim($idProducts, ',');
+
+    // получаем масси впродуктов в заданной категории
+    if($idProducts){
+        //Получаем товары из базы данных
+        $query ="SELECT * FROM a_product WHERE id IN($idProducts) ORDER BY title";
+    }
+    else{
+        $query ="SELECT * FROM a_product ORDER BY title";
+    }
+    $result = mysqli_query($link, $query) or die("Ошибка " . mysqli_error($link));
+    if(!$result) throw new Exception('При проверке категории возникла ошибка');
+
+    $products = array();
+    while($row = mysqli_fetch_assoc($result)){
+        $products[] = $row;
+    }
+
+   return $products;
+ }//function getProducts
+
+
+//======================================================================
+//вспомогательная функция. Получаем  список категорий в которых непосредственно хранится продукт
+function getProductCategoty($idProduct, $link){
+        // Получаем список id категорий
+        $query ="SELECT category_id FROM a_product_category WHERE product_id like ".$idProduct;
+        $result = mysqli_query($link, $query) or die("Ошибка " . mysqli_error($link));
+        if(!$result) throw new Exception('При проверке категории возникла ошибка');
+        $idCategory = array();
+        while($row = mysqli_fetch_row($result)){
+            $idCategory[] = $row[0];
+        }
+
+   return $idCategory;
+ }//getProductCategoty
+
+//======================================================================
+// Вспомогательная функция - получаем массив категория в которые входит корневая категория по нарастанию
+function getTempArr($arr, $id){
+
+    foreach ($arr as $item){
+        if($item['parent_id'] == $id){
+            $data[] = array ('title' => $item['title'],'code'=>$item['code']);
+            $data = array_merge($data, getCategoryId($arr, $item['id']));
+        }
+        else {
+            $data[] = array ('title' => $arr[$id]['title'],'code'=>$arr[$id]['code']);
+            return $data;
+        }
+    }
+    return $data;
+} //function  getTempArr($arr, $id)
+
+
+//======================================================================
+//Вспомогательная функция. Строит категории товара в XML документе
+function editCategory($sections, $tempArr, $index){
+    if (isset($tempArr[$index])){
+        $section = $sections->addChild('Раздел', $tempArr[$index]['title']);
+        if ($tempArr[$index]['code'] != NULL)
+            $section->addAttribute('Код', $tempArr[$index]['code'] );
+        $index ++;
+        editCategory($section, $tempArr, $index);
+    }
+}//function editCategory($arr, $id)
+
+
+//=======================================================================
+//========================================================================
+//========================================================================
 
 
 // ###############################################################################
@@ -198,54 +420,54 @@ function categoryTree($section, $parent_id, $link, $idProduct)
 // Демонстрация работы
 try
 {
-//    $a = "Мама мыла раму";
-//    $b = "мыла";
-//    echo "<p>Строка: $a;</p>";
-//    echo "<p>Подстрока: $b;</p>";
-//    print_r(convertString($a, $b));
-//    echo "</br>";
-//
-//    $a = "Если бы да кабы во рту выросли грибы";
-//    $b = "бы";
-//    echo "<p>Строка: $a;</p>";
-//    echo "<p>Подстрока: $b;</p>";
-//    print_r(convertString($a, $b));
-//
-//
-//    echo "</br></br>========================================================================</br></br>";
-//
-//    $arr = array(
-//        array('a'=>2,'b'=>1),
-//        array('a'=>5, 'b'=>8),
-//        array('a'=>3,'b'=>7),
-//        array('a'=>2,'b'=>9)
-//    );
-//
-//
-//    var_dump($arr);
-//    echo "</br>";
-//    echo "</br>";
-//    echo "<p>Массив отсортирован по столбцу b</p>";
-//    var_dump(mySortForKey($arr, 'b'));
-//    echo "</br>";
-//    echo "<p>Массив отсортирован по столбцу a</p>";
-//    var_dump(mySortForKey($arr, 'a'));
-//
-//    echo "</br></br>";
-//    echo "<p>Массив без индекса b в одном из вложенных массивово</p>";
-//    $arr = array(
-//        array('a'=>2,'b'=>1),
-//        array('a'=>5, 8),
-//        array('a'=>3,'b'=>7),
-//        array('a'=>2,'b'=>9)
-//    );
-//
-//
-//    var_dump($arr);
-//    echo "</br>";
-//    echo "</br>";
-//    echo 'В массиве с указанным индексом нет ключа b: ';
-//    var_dump(mySortForKey($arr, 'b'));
+    $a = "Мама мыла раму";
+    $b = "мыла";
+    echo "<p>Строка: $a;</p>";
+    echo "<p>Подстрока: $b;</p>";
+    print_r(convertString($a, $b));
+    echo "</br>";
+
+    $a = "Если бы да кабы во рту выросли грибы";
+    $b = "бы";
+    echo "<p>Строка: $a;</p>";
+    echo "<p>Подстрока: $b;</p>";
+    print_r(convertString($a, $b));
+
+
+    echo "</br></br>========================================================================</br></br>";
+
+    $arr = array(
+        array('a'=>2,'b'=>1),
+        array('a'=>5, 'b'=>8),
+        array('a'=>3,'b'=>7),
+        array('a'=>2,'b'=>9)
+    );
+
+
+    var_dump($arr);
+    echo "</br>";
+    echo "</br>";
+    echo "<p>Массив отсортирован по столбцу b</p>";
+    var_dump(mySortForKey($arr, 'b'));
+    echo "</br>";
+    echo "<p>Массив отсортирован по столбцу a</p>";
+    var_dump(mySortForKey($arr, 'a'));
+
+    echo "</br></br>";
+    echo "<p>Массив без индекса b в одном из вложенных массивово</p>";
+    $arr = array(
+        array('a'=>2,'b'=>1),
+        array('a'=>5, 8),
+        array('a'=>3,'b'=>7),
+        array('a'=>2,'b'=>9)
+    );
+
+
+    var_dump($arr);
+    echo "</br>";
+    echo "</br>";
+    echo 'В массиве с указанным индексом нет ключа b: ';
+    var_dump(mySortForKey($arr, 'b'));
 
 
     echo "</br></br>========================================================================</br></br>";
@@ -254,6 +476,8 @@ try
     $xmlFile = 'Products.xml';
     importXml($xmlFile);
 
+   $resultFile = 'ResultFile.xml';
+   exportXml($resultFile, 103);
 
 
 } catch (Exception $ex)
@@ -269,9 +493,6 @@ try
 <!-- ############################################################################### -->
 
 
-
-<!--В Xml файле в свойствах товара есть единицы измерения. Про них в задании не сказано-->
-<!--Разделы Код -?-->
 </body>
 </html>
 

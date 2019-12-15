@@ -101,9 +101,13 @@ function  importXml($a)
     $products = simplexml_load_file($a);
 
     //Проходим по товарам
+    if(!isset($products->Товар)) exit("В файле нет товаров");
     foreach ($products->Товар as $goods) {
         // создание строки запроса
-        $query ="INSERT INTO a_product VALUES(NULL, ".$goods['Код'].", \"".$goods['Название']."\")";
+        $code = htmlentities(mysqli_real_escape_string($link, $goods['Код']));
+        $title = htmlentities(mysqli_real_escape_string($link, $goods['Название']));
+        if (!isset($code) || !is_int((int)$code) || !isset($title)) continue;
+        $query ="INSERT INTO a_product VALUES(NULL, ".$code.", \"".$title."\")";
         // выполняем запрос
         $result = mysqli_query($link, $query) or die("Ошибка " . mysqli_error($link));
         $idProduct = mysqli_insert_id($link);
@@ -111,31 +115,43 @@ function  importXml($a)
 
 
             //Проходим по ценам товара
-            foreach ($goods->Цена as $price) {
-                // создание строки запроса
-                $query ="INSERT INTO a_price VALUES(NULL, $idProduct, \"".$price['Тип']."\", \"".$price."\")";
-                // выполняем запрос
-                $result = mysqli_query($link, $query) or die("Ошибка " . mysqli_error($link));
-                if(!$result) throw new Exception('Цены не добавлены в БД');
-            }//foreach ($goods->Цена as $price)
-
+            if (isset($goods->Цена)) {
+                foreach ($goods->Цена as $price) {
+                    // создание строки запроса
+                    $type = htmlentities(mysqli_real_escape_string($link, $price['Тип']));
+                    $price = htmlentities(mysqli_real_escape_string($link, $price));
+                    if (!isset($type) || !isset($price)  || !is_float((float)$price)) continue;
+                    $query = "INSERT INTO a_price VALUES(NULL, $idProduct, \"" . $type . "\", \"" . $price . "\")";
+                    // выполняем запрос
+                    $result = mysqli_query($link, $query) or die("Ошибка " . mysqli_error($link));
+                    if (!$result) throw new Exception('Цены не добавлены в БД');
+                }//foreach ($goods->Цена as $price)
+            }//if
 
             //Проходим по свойствам товара
-            foreach ($goods->Свойства->children() as $property) {
+            if(isset($goods->Свойства) && $goods->Свойства->children()->count() > 0) {
+                foreach ($goods->Свойства->children() as $property) {
 
-                ($property['ЕдИзм'] == NULL)? $unit = "NULL": $unit = (string)$property['ЕдИзм'];
-                // создание строки запроса
-                $query ="INSERT INTO a_property VALUES(NULL, $idProduct, \"".$property->getName()."\", \"".$unit."\", \"".$property."\")";
-                // выполняем запрос
-                $result = mysqli_query($link, $query) or die("Ошибка " . mysqli_error($link));
-                if(!$result) throw new Exception('Свойства не добавлены в БД');
-            }//foreach ($goods->Свойства->children() as $property)
+                    ($property['ЕдИзм'] == NULL) ? $unit = "NULL" : $unit = (string)$property['ЕдИзм'];
+                    // создание строки запроса
+                    $name = $property->getName();
+                    $name = htmlentities(mysqli_real_escape_string($link, $name));
+                    $unit = htmlentities(mysqli_real_escape_string($link, $unit));
+                    $property = htmlentities(mysqli_real_escape_string($link, $property));
+                    if (!isset($name) || !isset($unit) || !isset($property)) continue;
+                    $query = "INSERT INTO a_property VALUES(NULL, $idProduct, \"" . $name . "\", \"" . $unit . "\", \"" . $property . "\")";
+                    // выполняем запрос
+                    $result = mysqli_query($link, $query) or die("Ошибка " . mysqli_error($link));
+                    if (!$result) throw new Exception('Свойства не добавлены в БД');
+                }//foreach ($goods->Свойства->children() as $property)
+            }//if
 
              //Проходим по разделам товара
-             foreach ($goods->Разделы->Раздел as $section) {
-                 categoryTree($section, 0, $link, $idProduct); // рекурсивная функция
-            }//foreach ($goods->Разделы->Раздел as $section)
-
+            if (isset($goods->Разделы) && $goods->Разделы->Раздел->count() > 0) {
+                foreach ($goods->Разделы->Раздел as $section) {
+                    categoryTree($section, 0, $link, $idProduct); // рекурсивная функция
+                }//foreach ($goods->Разделы->Раздел as $section)
+            }//if
     }//foreach ($products->Товар as $goods)
 
 
@@ -161,11 +177,16 @@ function categoryTree($section, $parent_id, $link, $idProduct)
 
     if($idCategory == NULL){ //если нет категории с таким названием
         // создание строки запроса
-        $query ="INSERT INTO a_category VALUES(NULL, ".$code.", \"".$section."\", $parent_id)";
-        // выполняем запрос
-        $result = mysqli_query($link, $query) or die("Ошибка " . mysqli_error($link));
-        if(!$result) throw new Exception('Категория не добавлены в БД');
-        $idCategory = mysqli_insert_id($link);
+        $code = htmlentities(mysqli_real_escape_string($link, $code));
+        $sect = htmlentities(mysqli_real_escape_string($link, $section));
+        $parent_id = htmlentities(mysqli_real_escape_string($link, $parent_id));
+        if (isset($code) && is_int((int)$code) && isset($section) && isset($parent_id)) {
+            $query = "INSERT INTO a_category VALUES(NULL, " . $code . ", \"" . $sect . "\", $parent_id)";
+            // выполняем запрос
+            $result = mysqli_query($link, $query) or die("Ошибка " . mysqli_error($link));
+            if (!$result) throw new Exception('Категория не добавлены в БД');
+            $idCategory = mysqli_insert_id($link);
+        }//if
     }
 
 
@@ -173,16 +194,20 @@ function categoryTree($section, $parent_id, $link, $idProduct)
     if($section->children()->count() > 0){
          //Проходим по дочерним разделам
         // рекрсивный вызов функции
-        foreach ($section->children() as $section) {
-            categoryTree($section, $idCategory, $link, $idProduct);
+        foreach ($section->children() as $item) {
+            categoryTree($item  , $idCategory, $link, $idProduct);
         }//foreach ($goods->Разделы->Раздел as $section)
     }
     else{
         //добавим товар в категорию
-        $query ="INSERT INTO a_product_category VALUES(NULL, $idProduct, $idCategory)";
-        // выполняем запрос
-        $result = mysqli_query($link, $query) or die("Ошибка " . mysqli_error($link));
-        if(!$result) throw new Exception('Товар не добавлен в категорию');
+        $idProduct = htmlentities(mysqli_real_escape_string($link, $idProduct));
+        $idCategory = htmlentities(mysqli_real_escape_string($link, $idCategory));
+        if (isset($idProduct) && isset($idCategory)) {
+            $query = "INSERT INTO a_product_category VALUES(NULL, $idProduct, $idCategory)";
+            // выполняем запрос
+            $result = mysqli_query($link, $query) or die("Ошибка " . mysqli_error($link));
+            if (!$result) throw new Exception('Товар не добавлен в категорию');
+        }// if
     }// if
 
 }//categoryTree($parent_id)
@@ -219,7 +244,7 @@ function  exportXml($a, $b)
         $arr_category[] = $row;
     }
 
-
+    $b = htmlentities(mysqli_real_escape_string($link, $b));
     //Получаем id заданной категории
     $query ="SELECT id FROM a_category
              WHERE code like \"".$b."\" LIMIT 1";
@@ -240,11 +265,20 @@ function  exportXml($a, $b)
     //!!!!!!!!!!
     //формируем XML контент
     $file = "exportResult.xml";
-    $content = new SimpleXMLElement('<?xml version="1.0" encoding="utf-8"?><Товары/>');
+    $doc = new DOMDocument('1.0', 'utf-8');
+    $content = $doc->createElement('Товары');
+    $doc->appendChild($content);
     foreach ($products as $product){
-       $Prod = $content->addChild('Товар');
-       $Prod->addAttribute('Код', $product['code'] );
-       $Prod->addAttribute('Название', $product['title'] );
+       $element = $doc->createElement('Товар');
+            $atr1 = $doc->createAttribute('Код');
+            $atr1->value = $product['code'];
+        $element->appendChild($atr1);
+            $atr2 = $doc->createAttribute('Название');
+            $atr2->value = $product['title'];
+       $element->appendChild($atr2);
+       $Prod = $content->appendChild($element);
+
+
 
 
         // получаем цены для данного товара
@@ -256,8 +290,11 @@ function  exportXml($a, $b)
             $prices[] = $row;
         }//while
         foreach ($prices as $price){
-            $pr = $Prod->addChild('Цена', $price['price']);
-            $pr->addAttribute('Тип', $price['type']);
+            $element = $doc->createElement('Цена', $price['price']);
+                $atr = $doc->createAttribute('Тип');
+                $atr->value = $price['type'];
+            $element->appendChild($atr);
+            $pr = $Prod->appendChild($element);
         }//foreach ($prices as $price)
         //---------------------------------------------------------
 
@@ -270,16 +307,23 @@ function  exportXml($a, $b)
             $properties[] = $row;
         }//while
 
-        $prop = $Prod->addChild('Свойства');
+        $element = $doc->createElement('Свойства');
+        $prop = $Prod->appendChild($element);
         foreach ($properties as $property){
-            $item = $prop->addChild($property['property'], $property['value']);
-           // if ($property['unit'] != NULL) $item->addAttribute('ЕдИзм', $property['unit']);
+            $element = $doc->createElement($property['property'], $property['value']);
+            if ($property['unit'] != "NULL"){
+                $atr = $doc->createAttribute('ЕдИзм');
+                $atr->value = $property['unit'];
+                $element->appendChild($atr);
+            }
+            $item = $prop->appendChild($element);
         }//foreach ($prices as $price)
         //---------------------------------------------------------
 
 
         //Формируем разделы к которым относится продукт
-        $sections = $Prod->addChild('Разделы');
+        $element = $doc->createElement('Разделы');
+        $sections = $Prod->appendChild($element);
 
         // формируем массив с категориями, в котором ключ - id категории
         $query ="SELECT * FROM a_category";
@@ -302,7 +346,7 @@ function  exportXml($a, $b)
           $tempArr = getTempArr($all_category, $category);
           $tempArr = array_reverse($tempArr);
 
-          editCategory($sections, $tempArr, 0);
+         editCategory($doc, $sections, $tempArr, 0);
         }//foreach ($productCategoty as $category){
 
     }//foreach ($products as $product)
@@ -310,7 +354,7 @@ function  exportXml($a, $b)
 
 
     //записываем данные  в xml файл
-     $content->asXML($file);
+    $doc->save($file);
    // закрываем подключение
     mysqli_close($link);
 
@@ -398,13 +442,16 @@ function getTempArr($arr, $id){
 
 //======================================================================
 //Вспомогательная функция. Строит категории товара в XML документе
-function editCategory($sections, $tempArr, $index){
+function editCategory($doc, $sections, $tempArr, $index){
     if (isset($tempArr[$index])){
-        $section = $sections->addChild('Раздел', $tempArr[$index]['title']);
+        $element = $doc->createElement('Раздел', $tempArr[$index]['title']);
+        $section = $sections->appendChild($element);
         if ($tempArr[$index]['code'] != NULL)
-            $section->addAttribute('Код', $tempArr[$index]['code'] );
+            $atr = $doc->createAttribute('Код');
+            $atr->value = $tempArr[$index]['code'];
+            $section->appendChild($atr);
         $index ++;
-        editCategory($section, $tempArr, $index);
+        editCategory($doc, $section, $tempArr, $index);
     }
 }//function editCategory($arr, $id)
 
@@ -420,64 +467,64 @@ function editCategory($sections, $tempArr, $index){
 // Демонстрация работы
 try
 {
-    $a = "Мама мыла раму";
-    $b = "мыла";
-    echo "<p>Строка: $a;</p>";
-    echo "<p>Подстрока: $b;</p>";
-    print_r(convertString($a, $b));
-    echo "</br>";
+//    $a = "Мама мыла раму";
+//    $b = "мыла";
+//    echo "<p>Строка: $a;</p>";
+//    echo "<p>Подстрока: $b;</p>";
+//    print_r(convertString($a, $b));
+//    echo "</br>";
+//
+//    $a = "Если бы да кабы во рту выросли грибы";
+//    $b = "бы";
+//    echo "<p>Строка: $a;</p>";
+//    echo "<p>Подстрока: $b;</p>";
+//    print_r(convertString($a, $b));
+//
+//
+//    echo "</br></br>========================================================================</br></br>";
+//
+//    $arr = array(
+//        array('a'=>2,'b'=>1),
+//        array('a'=>5, 'b'=>8),
+//        array('a'=>3,'b'=>7),
+//        array('a'=>2,'b'=>9)
+//    );
+//
+//
+//    var_dump($arr);
+//    echo "</br>";
+//    echo "</br>";
+//    echo "<p>Массив отсортирован по столбцу b</p>";
+//    var_dump(mySortForKey($arr, 'b'));
+//    echo "</br>";
+//    echo "<p>Массив отсортирован по столбцу a</p>";
+//    var_dump(mySortForKey($arr, 'a'));
+//
+//    echo "</br></br>";
+//    echo "<p>Массив без индекса b в одном из вложенных массивово</p>";
+//    $arr = array(
+//        array('a'=>2,'b'=>1),
+//        array('a'=>5, 8),
+//        array('a'=>3,'b'=>7),
+//        array('a'=>2,'b'=>9)
+//    );
+//
+//
+//    var_dump($arr);
+//    echo "</br>";
+//    echo "</br>";
+//    echo 'В массиве с указанным индексом нет ключа b: ';
+//    var_dump(mySortForKey($arr, 'b'));
+//
+//
+//    echo "</br></br>========================================================================</br></br>";
 
-    $a = "Если бы да кабы во рту выросли грибы";
-    $b = "бы";
-    echo "<p>Строка: $a;</p>";
-    echo "<p>Подстрока: $b;</p>";
-    print_r(convertString($a, $b));
 
+//    $xmlFile = 'Products.xml';
+//    importXml($xmlFile);
 
-    echo "</br></br>========================================================================</br></br>";
-
-    $arr = array(
-        array('a'=>2,'b'=>1),
-        array('a'=>5, 'b'=>8),
-        array('a'=>3,'b'=>7),
-        array('a'=>2,'b'=>9)
-    );
-
-
-    var_dump($arr);
-    echo "</br>";
-    echo "</br>";
-    echo "<p>Массив отсортирован по столбцу b</p>";
-    var_dump(mySortForKey($arr, 'b'));
-    echo "</br>";
-    echo "<p>Массив отсортирован по столбцу a</p>";
-    var_dump(mySortForKey($arr, 'a'));
-
-    echo "</br></br>";
-    echo "<p>Массив без индекса b в одном из вложенных массивово</p>";
-    $arr = array(
-        array('a'=>2,'b'=>1),
-        array('a'=>5, 8),
-        array('a'=>3,'b'=>7),
-        array('a'=>2,'b'=>9)
-    );
-
-
-    var_dump($arr);
-    echo "</br>";
-    echo "</br>";
-    echo 'В массиве с указанным индексом нет ключа b: ';
-    var_dump(mySortForKey($arr, 'b'));
-
-
-    echo "</br></br>========================================================================</br></br>";
-
-
-    $xmlFile = 'Products.xml';
-    importXml($xmlFile);
-
-   $resultFile = 'ResultFile.xml';
-   exportXml($resultFile, 103);
+//   $resultFile = 'ResultFile.xml';
+//   exportXml($resultFile, 101);
 
 
 } catch (Exception $ex)

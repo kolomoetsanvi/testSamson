@@ -46,12 +46,11 @@ class newBase
         return (string)(strlen($size) + $size);
 
     }
-    //Назнаяение данно фыункции не понятно
-    // возможно имелось ввиду это:
+
     public function __sleep()
     {
 //        return ['value'];
-        return $this->value;
+        return array( $this->value );
     }
     /**
      * @return string
@@ -124,12 +123,11 @@ class newView extends newBase
     /**
      * @return string
      */
-    //Назнаяение данно фыункции не понятно
-    // возможно имелось ввиду это:
+
     public function __sleep()
     {
 //        return ['property'];
-        return (string)$this->property;
+        return array( $this->property );
     }
     /**
      * @return string
